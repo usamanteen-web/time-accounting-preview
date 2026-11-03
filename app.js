@@ -147,9 +147,22 @@ function buildTrend() {
   const group = new THREE.Group(); scene.add(group);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  const barMaterial = new THREE.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, metalness: .30, roughness: .25, clearcoat: 1, clearcoatRoughness: .14, envMapIntensity: .65 });
-  const costMaterial = new THREE.MeshPhysicalMaterial({ color: 0x9daec7, metalness: .05, roughness: .45, transparent: true, opacity: .86, clearcoat: 1, depthWrite: false });
-  const goldMaterial = new THREE.MeshPhysicalMaterial({ color: 0xefa919, metalness: .55, roughness: .19, clearcoat: 1, envMapIntensity: .45, emissive: 0xd99b1a, emissiveIntensity: .10 });
+  // Front-view 3D geometry with sampled, vertex-lit satin. Environment reflections
+  // were making v5 look like chrome boxes rather than the reference's flat gloss.
+  renderer.toneMapping = THREE.NoToneMapping;
+  const barMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
+  // A narrow source-style rim, not an environment-map chrome frame.
+  barMaterial.onBeforeCompile = shader => {
+    shader.vertexShader = 'attribute vec2 satin; varying vec2 vSatin;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSatin=satin;');
+    shader.fragmentShader = 'varying vec2 vSatin;\n' + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      float edge=exp(-pow((vSatin.x-.065)/.024,2.))*.19;
+      float top=exp(-pow((vSatin.y-.978)/.016,2.))*.15;
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.78,.96),edge+top);`);
+  };
+  const costMaterial = new THREE.MeshBasicMaterial({ color: 0xbac9e3, transparent: true, opacity: .94, depthWrite: false });
+  const goldMaterial = new THREE.MeshBasicMaterial({ color: 0xf4c35d });
   let picks = [], bars = [], lineObjects = [], layout = null;
   function resize() {
     const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
@@ -158,7 +171,7 @@ function buildTrend() {
     group.children.slice().forEach(obj => { group.remove(obj); obj.geometry?.dispose(); });
     picks = []; bars = []; lineObjects = [];
     const mobile = w < 400;
-    const left = mobile ? 38 : 66, right = 2, bottom = mobile ? 31 : 33, top = 27;
+    const left = mobile ? 38 : 53, right = 2, bottom = mobile ? 31 : 26, top = 26;
     const plotHeight = h - bottom - top;
     const step = (w - left - right) / 6;
     const barWidth = Math.min(mobile ? 16 : 29, step * .34);
@@ -171,7 +184,7 @@ function buildTrend() {
       const label = document.createElement('span'); label.className = 'y-tick'; label.textContent = text; label.style.top = `${y}px`; axis.append(label);
     });
     data.trend.forEach((d, i) => {
-      const x = left + step * (i + .5);
+      const x = left + step * (i + .5) + (mobile ? 0 : 3 - i);
       const shift = barWidth * .45;
       const yRevenue = plotHeight * d.revenue / 1600000;
       const yCost = plotHeight * d.cost / 1600000;
@@ -182,21 +195,32 @@ function buildTrend() {
       const barGeometry = new RoundedBoxGeometry(barWidth, yRevenue, 13, 5, 4.2);
       const positions = barGeometry.attributes.position;
       const colors = new Float32Array(positions.count * 3);
-      const base = new THREE.Color(0x061f3b), topColor = new THREE.Color(0x10457e);
+      const base = new THREE.Color(0x0c2e53), topColor = new THREE.Color(0x3771bb);
       for (let v = 0; v < positions.count; v++) {
         const height = THREE.MathUtils.clamp((positions.getY(v) + yRevenue / 2) / yRevenue, 0, 1);
-        const c = base.clone().lerp(topColor, Math.pow(height, 1.6));
+        const c = base.clone().lerp(topColor, Math.pow(height, 2.5));
         c.multiplyScalar(.86 + .14 * (1 - positions.getX(v) / barWidth));
         colors[v * 3] = c.r; colors[v * 3 + 1] = c.g; colors[v * 3 + 2] = c.b;
       }
       barGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const satin = new Float32Array(positions.count * 2);
+      for(let v=0;v<positions.count;v++){satin[v*2]=positions.getX(v)/barWidth+.5;satin[v*2+1]=positions.getY(v)/yRevenue+.5;}
+      barGeometry.setAttribute('satin', new THREE.BufferAttribute(satin, 2));
       const bar = new THREE.Mesh(barGeometry, barMaterial);
       bar.position.set(x - shift, bottom + yRevenue / 2, 0); group.add(bar);
       bar.userData = { month: d.month, name: 'รายรับ', value: d.revenue }; picks.push(bar);
       bars.push({ mesh: bar, height: yRevenue, bottom });
       const pt = new THREE.Vector3(x, bottom + plotHeight * d.profit / 1600000, 18);
       pointPositions.push(pt);
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(mobile ? 4 : 6.6, 24, 16), goldMaterial);
+      const sphereGeometry = new THREE.SphereGeometry(mobile ? 4 : 4.8, 24, 16);
+      const sp=sphereGeometry.attributes.position, sc=new Float32Array(sp.count*3);
+      for(let v=0;v<sp.count;v++){
+        const yn=sp.getY(v)/(mobile?4:4.8),xn=sp.getX(v)/(mobile?4:4.8);
+        const c=new THREE.Color(0xe8ab35).lerp(new THREE.Color(0xfff0b6),THREE.MathUtils.clamp(.45+yn*.45-xn*.2,0,1));
+        sc.set([c.r,c.g,c.b],v*3);
+      }
+      sphereGeometry.setAttribute('color',new THREE.BufferAttribute(sc,3));
+      const sphere = new THREE.Mesh(sphereGeometry, new THREE.MeshBasicMaterial({vertexColors:true}));
       sphere.position.copy(pt); group.add(sphere); picks.push(sphere); lineObjects.push(sphere);
       sphere.userData = { month: d.month, name: 'กำไร', value: d.profit };
       // Screen-space labels are aligned to the projected sphere, not guessed.
@@ -205,7 +229,7 @@ function buildTrend() {
       label.style.left = `${(projected.x * .5 + .5) * w}px`; label.style.top = `${h - bottom + 7}px`; axis.append(label);
     });
     const curve = new THREE.CatmullRomCurve3(pointPositions, false, 'centripetal');
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 100, mobile ? 1.25 : 1.75, 8, false), goldMaterial);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 100, mobile ? 1.25 : 1.3, 8, false), goldMaterial);
     group.add(tube); lineObjects.push(tube);
     layout = { w, h, left, bottom, plotHeight, step };
     window.__TREND_TARGETS__ = picks.map(obj => {
@@ -236,12 +260,12 @@ function buildDonut() {
   const renderer = makeRenderer('donut-canvas');
   const canvas = renderer.domElement;
   const scene = new THREE.Scene(); studio(scene, renderer);
-  renderer.toneMappingExposure = 1.06;
+  renderer.toneMapping = THREE.NoToneMapping;
   const camera = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, .1, 50);
   camera.position.set(0, 0, 10);
   const group = new THREE.Group(); scene.add(group);
   const order = ['propak', 'thaifex', 'pet', 'whx'];
-  const colors = [0x032654, 0x519ae1, 0xf3a714, 0xaeb3bf];
+  const colors = [0x1a447c, 0x91c3ff, 0xffbf4f, 0xd8dae2];
   const picks = [];
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
   let angle = Math.PI / 2;
@@ -256,13 +280,13 @@ function buildDonut() {
     shape.absarc(0, 0, .98, end + gap, angle - gap, false);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: .13, bevelEnabled: true, bevelThickness: .018, bevelSize: .018, bevelSegments: 3, steps: 1, curveSegments: 80 });
-    const material = new THREE.MeshPhysicalMaterial({ color: colors[i], vertexColors: true, metalness: .23, roughness: .23, clearcoat: 1, clearcoatRoughness: .12, envMapIntensity: .65 });
+    const material = new THREE.MeshBasicMaterial({ color: colors[i], vertexColors: true });
     const positions = geometry.attributes.position;
     const shading = new Float32Array(positions.count * 3);
     for (let v = 0; v < positions.count; v++) {
       const x = positions.getX(v), y = positions.getY(v);
       const radial = Math.sqrt(x*x+y*y);
-      const intensity = .58 + .25 * (y + 1.4) / 2.8 + .17 * (radial - .98) / .42;
+      const intensity = .76 + .16 * (y + 1.4) / 2.8 + .08 * (radial - .98) / .42;
       shading[v*3] = intensity; shading[v*3+1] = intensity; shading[v*3+2] = intensity;
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(shading, 3));
@@ -372,7 +396,7 @@ function interactions() {
   document.querySelectorAll('.filter select').forEach(select => select.addEventListener('change', () => {
     filterProjects(); notify('ปรับรายการตัวอย่างแล้ว · ยอดสรุปแสดงทุกโปรเจกต์');
   }));
-  const categories = ['ค่าติดไฟ', 'ค่าโครงสร้าง(รวมขนส่ง)', 'ค่าเฟอร์นิเจอร์', 'ค่าออแกไนซ์', 'ค่าของใช้อื่นๆตามรีเควสลูกค้า'];
+  const categories = ['ค่าติดไฟ', 'ค่าโครงสร้าง (รวมขนส่ง)', 'ค่าเฟอร์นิเจอร์', 'ค่าออแกไนซ์', 'ค่าของใช้อื่นๆตามรีเควสลูกค้า'];
   document.querySelectorAll('.cost-bar').forEach(bar => {
     const text = `<strong>หมวดต้นทุน · สัดส่วนตัวอย่าง</strong><br>${categories.join('<br>')}`;
     bar.addEventListener('pointermove', e => showTooltip(text, e.clientX, e.clientY));
@@ -384,13 +408,16 @@ function interactions() {
 
 try {
   await document.fonts.ready;
-  buildSilk(); buildTrend(); buildDonut(); interactions();
+  // Reference art replaces the approximated silk shader. Keep charts as live WebGL.
+  const scalePage = () => document.documentElement.style.setProperty('--page-scale', innerWidth > 760 ? innerWidth / 1150 : 1);
+  scalePage(); window.addEventListener('resize', scalePage);
+  buildTrend(); buildDonut(); interactions();
   const start = performance.now();
   let frameCount = 0;
   const numberNodes = [...document.querySelectorAll('[data-count]')];
   function animate(now) {
     const elapsed = (now - start) / 1000;
-    const p = reducedMotion ? 1 : Math.min(1, elapsed / 1.4);
+    const p = reducedMotion ? 1 : Math.max(0, Math.min(1, elapsed / 1.4));
     const growth = 1 - Math.pow(1 - p, 3);
     if (p < 1 || frameCount < 3) numberNodes.forEach(node => { node.textContent = money(Number(node.dataset.count) * growth); });
     if (p >= 1) numberNodes.forEach(node => { node.textContent = money(Number(node.dataset.count)); });
