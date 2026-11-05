@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>ออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) — TIME</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><b>TIME.</b><span>ออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)</span></div>
+  <div class="bar-actions">
+    <button class="btn ghost" id="btnNew" type="button">+ ใบใหม่</button>
+    <button class="btn ghost" id="btnSave" type="button">บันทึกไว้ในเครื่อง</button>
+    <button class="btn gold" id="btnPrint" type="button">พิมพ์ / บันทึกเป็น PDF</button>
+  </div>
+</header>
+
+<main class="layout">
+  <form id="f" class="panel" autocomplete="off" novalidate>
+    <section>
+      <h2>เลขที่หนังสือ</h2>
+      <div class="row2">
+        <label>เล่มที่<input name="book_no" placeholder="(ถ้ามี)"></label>
+        <label>เลขที่<input name="run_no" placeholder="เช่น 00149/2026" required></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>ผู้มีหน้าที่หักภาษี (ผู้จ่ายเงิน)</h2>
+      <label>ชื่อ<input name="payer_name" required></label>
+      <label>เลขประจำตัวผู้เสียภาษี 13 หลัก<input name="payer_tin" inputmode="numeric" maxlength="17" required></label>
+      <small class="msg" data-for="payer_tin"></small>
+      <label>ที่อยู่<input name="payer_addr" required></label>
+    </section>
+
+    <section>
+      <h2>ผู้ถูกหักภาษี (ผู้รับเงิน)</h2>
+      <label>เลือกจากรายชื่อที่เคยออก<select id="payeePick"><option value="">— พิมพ์ใหม่ —</option></select></label>
+      <label>ชื่อ<input name="payee_name" required placeholder="เช่น บริษัท ... จำกัด (สำนักงานใหญ่)"></label>
+      <div class="row2">
+        <label>ประเภท<select name="payee_type">
+          <option value="corp">นิติบุคคล → ภ.ง.ด.53</option>
+          <option value="person">บุคคลธรรมดา → ภ.ง.ด.3</option></select></label>
+        <label>เลขประจำตัว 13 หลัก<input name="payee_tin" inputmode="numeric" maxlength="17" required></label>
+      </div>
+      <small class="msg" data-for="payee_tin"></small>
+      <label>ที่อยู่<input name="payee_addr" required></label>
+    </section>
+
+    <section>
+      <h2>การจ่ายเงิน</h2>
+      <div class="row2">
+        <label>ลำดับที่ในแบบ<input name="seq_no" inputmode="numeric" placeholder="1"></label>
+        <label>วันที่จ่าย<input name="pay_date" type="date" required></label>
+      </div>
+      <label>ประเภทเงินได้<select name="income_row">
+        <option value="r5">5. มาตรา 3 เตรส (ค่าบริการ / ค่าจ้างทำของ / ค่าขนส่ง / ค่าโฆษณา / ค่าเช่า)</option>
+        <option value="r1">1. เงินเดือน ค่าจ้าง ฯลฯ 40(1)</option>
+        <option value="r2">2. ค่าธรรมเนียม ค่านายหน้า 40(2)</option>
+        <option value="r3">3. ค่าลิขสิทธิ์ 40(3)</option>
+        <option value="r6">6. อื่น ๆ (ระบุ)</option></select></label>
+      <label>ระบุรายการ (ข้อ 5 / ข้อ 6)<input name="income_spec" value="ค่าบริการ"></label>
+      <div class="row3">
+        <label>จำนวนเงินที่จ่าย (ก่อน VAT)<input name="amount" inputmode="decimal" required placeholder="0.00"></label>
+        <label>อัตราภาษี %<select name="rate">
+          <option>3</option><option>1</option><option>1.5</option><option>2</option><option>5</option><option>10</option></select></label>
+        <label>ภาษีที่หัก<input name="wht" inputmode="decimal" placeholder="คำนวณให้"></label>
+      </div>
+      <small class="hint">ภาษีคำนวณจากยอดก่อน VAT อัตโนมัติ ถ้าแก้เองระบบจะเตือนเมื่อไม่ตรง</small>
+      <small class="msg" data-for="wht"></small>
+      <label>ผู้จ่ายเงิน<select name="payer_mode">
+        <option value="1">(1) หัก ณ ที่จ่าย</option><option value="2">(2) ออกให้ตลอดไป</option>
+        <option value="3">(3) ออกให้ครั้งเดียว</option><option value="4">(4) อื่น ๆ</option></select></label>
+      <label>วันที่ออกหนังสือ<input name="issue_date" type="date" required></label>
+    </section>
+
+    <section>
+      <h2>สำเนาที่จะพิมพ์</h2>
+      <div class="copies">
+        <label class="chk"><input type="checkbox" name="c1" checked> ฉบับที่ 1–2 (ให้ผู้ถูกหักภาษี)</label>
+        <label class="chk"><input type="checkbox" name="c3" checked> ฉบับที่ 3–4 (เก็บที่บริษัท)</label>
+      </div>
+    </section>
+  </form>
+
+  <section class="preview-wrap">
+    <div class="preview-head"><b>ตัวอย่างก่อนพิมพ์</b><span id="status" class="pill">กรอกข้อมูลให้ครบ</span></div>
+    <div id="pages"></div>
+  </section>
+</main>
+
+<section class="history panel">
+  <h2>ใบที่บันทึกไว้ในเครื่องนี้</h2>
+  <table id="hist"><thead><tr><th>เลขที่</th><th>วันที่จ่าย</th><th>ผู้ถูกหักภาษี</th><th class="r">เงินที่จ่าย</th><th class="r">ภาษี</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="hist-actions"><button class="btn ghost" id="btnCsv" type="button">ดาวน์โหลด CSV</button>
+  <span class="hint">ข้อมูลเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นเซิร์ฟเวอร์</span></div>
+</section>
+
+<template id="tplPage">
+  <article class="sheet">
+    <img class="form" src="assets/rd-50tawi-form.svg" alt="">
+    <div class="ov"></div>
+  </article>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
