@@ -265,6 +265,66 @@
   });
   function flash(t) { const s = $("#status"); s.textContent = t; }
 
+
+  // ---------- slip feed (encrypted; key from #k= fragment, kept in localStorage) ----------
+  const KEY_LS = STORE + ".feedkey";
+  let FEED = [];
+  const b64d = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  async function loadFeed() {
+    const m = /[#&]k=([\w-]+)/.exec(location.hash);
+    if (m) { localStorage.setItem(KEY_LS, m[1]); history.replaceState(null, "", location.pathname + location.search); }
+    const k = localStorage.getItem(KEY_LS);
+    const info = $("#feedInfo");
+    if (!k) { info.innerHTML = '<span class="lock">🔒 เปิดจากลิงก์ที่มีรหัส (ในห้อง Discord) ครั้งแรกครั้งเดียว</span>'; drawFeed(); return; }
+    try {
+      const r = await fetch("feed.enc.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("ไม่มีไฟล์รายการ");
+      const enc = await r.json();
+      const key = await crypto.subtle.importKey("raw", b64d(k), "AES-GCM", false, ["decrypt"]);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64d(enc.iv) }, key, b64d(enc.ct));
+      const data = JSON.parse(new TextDecoder().decode(pt));
+      FEED = data.items || [];
+      info.textContent = "อัปเดตล่าสุด " + new Date(data.generated.replace(/([+-]\d\d)(\d\d)$/, "$1:$2")).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+    } catch (e) {
+      info.innerHTML = '<span class="lock">เปิดรายการไม่ได้ (รหัสไม่ถูกหรือหมดอายุ)</span>';
+      FEED = [];
+    }
+    drawFeed();
+  }
+  function drawFeed() {
+    const tb = $("#feedTbl tbody");
+    if (!FEED.length) { tb.innerHTML = '<tr><td colspan="8" class="empty">ยังไม่มีรายการ</td></tr>'; $("#feedSum").innerHTML = ""; return; }
+    tb.innerHTML = FEED.map((x, i) => `<tr data-i="${i}">
+      <td>${x.paid ? beDate(x.pay_date) : '<span class="tag wait">รอโอน</span>'}</td>
+      <td>${esc(x.payee_name)}<span class="sub">${esc(x.description)}</span></td>
+      <td>${esc(x.project)}<span class="sub">${esc(x.booth)} · ${esc(x.category)}</span></td>
+      <td>${esc(x.transfer_ref || "—")}<span class="sub">${esc(x.pv_no)}</span></td>
+      <td class="r">${money(x.net_paid)}</td><td class="r">${money(x.wht)}</td>
+      <td>${x.cert_no ? `<span class="tag ok">${esc(x.cert_no)}</span><span class="sub">${x.form === "PND3" ? "ภ.ง.ด.3" : "ภ.ง.ด.53"} ลำดับ ${esc(x.seq_no)}</span>` : (x.paid ? "—" : '<span class="sub">ออกเมื่อมีสลิป</span>')}</td>
+      <td class="r">${x.cert_no ? `<button class="btn sm" type="button" data-open="${i}">เปิด 50 ทวิ</button>` : ""}</td></tr>`).join("");
+    const paid = FEED.filter((x) => x.paid);
+    const months = {};
+    paid.forEach((x) => { const k = x.pay_date.slice(0, 7); months[k] = (months[k] || 0) + x.wht; });
+    const mk = Object.keys(months).sort().reverse().slice(0, 2);
+    $("#feedSum").innerHTML = `<div class="kpi">โอนแล้ว<b>${paid.length} สลิป</b></div>` +
+      mk.map((k) => { const [y, m] = k.split("-").map(Number); return `<div class="kpi">ภาษีหัก ${TH_MONTH[m]} ${y + 543}<b>${money(months[k])}</b></div>`; }).join("") +
+      `<div class="kpi">รอโอน<b>${FEED.length - paid.length} รายการ</b></div>`;
+  }
+  function openFromFeed(i) {
+    const x = FEED[i]; if (!x) return;
+    blank();
+    fill({ run_no: x.cert_no, seq_no: x.seq_no, pay_date: x.pay_date, issue_date: x.pay_date,
+      payee_name: x.payee_name, payee_tin: x.payee_tin, payee_addr: x.payee_addr,
+      payee_type: x.form === "PND3" ? "person" : "corp", amount: x.amount.toFixed(2), rate: String(x.rate),
+      wht: x.wht.toFixed(2), income_row: "r5", income_spec: "ค่าบริการ" });
+    form.wht.dataset.auto = "0";
+    document.querySelectorAll("#feedTbl tr.sel").forEach((r) => r.classList.remove("sel"));
+    $(`#feedTbl tr[data-i="${i}"]`)?.classList.add("sel");
+    render();
+    $(".layout").scrollIntoView({ behavior: "smooth" });
+  }
+  $("#feedTbl").addEventListener("click", (e) => { const b = e.target.closest("button[data-open]"); if (b) openFromFeed(+b.dataset.open); });
+
   // ---------- boot: ?d=<base64url JSON> pre-fills (used by the PDF batch script) ----------
   function boot() {
     drawHist();
@@ -276,6 +336,7 @@
     } else if (draft) { fill(JSON.parse(draft)); }
     else blank();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(render); else render();
+    loadFeed();
   }
   window.__tinValid = tinValid; window.__bahtText = bahtText;
   boot();
